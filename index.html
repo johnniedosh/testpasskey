@@ -11,6 +11,8 @@
     button {
       padding: 10px 20px;
       font-size: 16px;
+      margin-right: 10px;
+      margin-bottom: 10px;
     }
     #output {
       margin-top: 20px;
@@ -25,6 +27,7 @@
 <body>
   <h1>Create an ED25519 Passkey (WebAuthn Demo)</h1>
   <button id="create-passkey">Register Passkey</button>
+  <button id="sign-message">Sign Message</button>
 
   <div id="output"></div>
 
@@ -37,6 +40,12 @@
         binary += String.fromCharCode(bytes[i]);
       }
       return btoa(binary);
+    }
+
+    // Helper function to convert string to ArrayBuffer
+    function stringToArrayBuffer(str) {
+      const encoder = new TextEncoder();
+      return encoder.encode(str);
     }
 
     // Mock getRegistrationOptions function with ED25519
@@ -71,6 +80,9 @@
       return options;
     }
 
+    // Store the created credential for later use
+    let storedCredential = null;
+
     // Function to create the passkey
     async function createPasskey() {
       const output = document.getElementById('output');
@@ -103,6 +115,9 @@
 
         output.textContent += '\nCredential created successfully!';
 
+        // Store the credential for signing
+        storedCredential = credential;
+
         // Prepare the attestation response
         const attestationResponse = {
           id: credential.id,
@@ -126,9 +141,70 @@
       }
     }
 
-    // Attach event listener to the button
+    // Function to sign a "foobar" message
+    async function signMessage() {
+      const output = document.getElementById('output');
+
+      if (!storedCredential) {
+        output.textContent += '\n\nPlease register a passkey first.';
+        return;
+      }
+
+      output.textContent += '\n\nSigning message "foobar"...';
+
+      try {
+        // Convert "foobar" to ArrayBuffer
+        const message = "foobar";
+        const messageBuffer = stringToArrayBuffer(message);
+
+        // Create a challenge from the message
+        const challenge = window.crypto.subtle.digest("SHA-256", messageBuffer);
+        const hashedChallenge = new Uint8Array(await challenge);
+
+        const publicKeyRequest = {
+          challenge: hashedChallenge,
+          timeout: 60000,
+          allowCredentials: [{
+            id: storedCredential.rawId,
+            type: "public-key",
+            transports: ["internal"] // Adjust transports as needed
+          }],
+          userVerification: "preferred"
+        };
+
+        // Get the assertion (signature)
+        const assertion = await navigator.credentials.get({
+          publicKey: publicKeyRequest
+        });
+
+        // Prepare the assertion response
+        const assertionResponse = {
+          id: assertion.id,
+          rawId: arrayBufferToBase64(assertion.rawId),
+          type: assertion.type,
+          response: {
+            authenticatorData: arrayBufferToBase64(assertion.response.authenticatorData),
+            clientDataJSON: arrayBufferToBase64(assertion.response.clientDataJSON),
+            signature: arrayBufferToBase64(assertion.response.signature),
+            userHandle: assertion.response.userHandle ? arrayBufferToBase64(assertion.response.userHandle) : null
+          }
+        };
+
+        output.textContent += '\n\nSigned Message (Assertion Response):';
+        output.textContent += '\n' + JSON.stringify(assertionResponse, null, 2);
+
+        // Optionally, display the original message
+        output.textContent += `\n\nOriginal Message: "${message}"`;
+
+      } catch (error) {
+        console.error(error);
+        output.textContent += `\n\nError: ${error.message}`;
+      }
+    }
+
+    // Attach event listeners to the buttons
     document.getElementById('create-passkey').addEventListener('click', createPasskey);
+    document.getElementById('sign-message').addEventListener('click', signMessage);
   </script>
 </body>
 </html>
-

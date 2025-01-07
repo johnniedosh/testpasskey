@@ -137,6 +137,7 @@
         output.textContent += '\n\nAttestation Response:';
         output.textContent += '\n' + JSON.stringify(attestationResponse, null, 2);
         output.textContent += '\n\n\n' + JSON.stringify(credential, null, 2);
+        output.textContent += '\n\n\n' + JSON.stringify(response.getPublicKeyAlgorithm(), null, 2);
 
         // Since there's no backend, we'll just display the attestation response
         // In a real application, you would send this to your server for verification and storage

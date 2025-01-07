@@ -112,10 +112,11 @@
         const credential = await navigator.credentials.create({
           publicKey: publicKey
         });
+        const { id, rawId, response, type } = credential;
         console.log('cred\n\n');
         console.log(credential);
         console.log('trying getPublicKeyAlgorithm');
-        console.log(credential.getPublicKeyAlgorithm());
+        console.log(response.getPublicKeyAlgorithm());
 
         output.textContent += '\nCredential created successfully!';
 

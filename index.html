@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create ED25519 Passkey Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+    #output {
+      margin-top: 20px;
+      white-space: pre-wrap;
+      background-color: #f9f9f9;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Create an ED25519 Passkey (WebAuthn Demo)</h1>
+  <button id="create-passkey">Register Passkey</button>
+
+  <div id="output"></div>
+
+  <script>
+    // Helper function to convert ArrayBuffer to Base64
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    // Mock getRegistrationOptions function with ED25519
+    function getRegistrationOptions() {
+      // In a real scenario, these options are fetched from the server
+      const options = {
+        challenge: window.crypto.getRandomValues(new Uint8Array(32)),
+        timeout: 60000,
+        rp: {
+          name: "Example Corp",
+          id: window.location.hostname
+        },
+        user: {
+          id: window.crypto.getRandomValues(new Uint8Array(16)), // Unique user ID
+          name: "user@example.com",
+          displayName: "Example User"
+        },
+        pubKeyCredParams: [
+          {
+            type: "public-key",
+            alg: -8 // EdDSA (ED25519) algorithm
+          }
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform", // Use platform authenticators (e.g., Touch ID, Windows Hello)
+          userVerification: "preferred"
+        },
+        attestation: "direct",
+        // Optionally, you can add excludeCredentials to prevent duplicate registrations
+      };
+
+      return options;
+    }
+
+    // Function to create the passkey
+    async function createPasskey() {
+      const output = document.getElementById('output');
+      output.textContent = 'Generating registration options...';
+
+      try {
+        const options = getRegistrationOptions();
+
+        // Convert necessary fields from base64 to ArrayBuffer
+        const publicKey = {
+          challenge: options.challenge,
+          timeout: options.timeout,
+          rp: options.rp,
+          user: {
+            id: options.user.id,
+            name: options.user.name,
+            displayName: options.user.displayName
+          },
+          pubKeyCredParams: options.pubKeyCredParams,
+          authenticatorSelection: options.authenticatorSelection,
+          attestation: options.attestation
+        };
+
+        output.textContent += '\n\nCreating credentials...';
+
+        // Create the credential
+        const credential = await navigator.credentials.create({
+          publicKey: publicKey
+        });
+
+        output.textContent += '\nCredential created successfully!';
+
+        // Prepare the attestation response
+        const attestationResponse = {
+          id: credential.id,
+          rawId: arrayBufferToBase64(credential.rawId),
+          type: credential.type,
+          response: {
+            attestationObject: arrayBufferToBase64(credential.response.attestationObject),
+            clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON)
+          }
+        };
+
+        output.textContent += '\n\nAttestation Response:';
+        output.textContent += '\n' + JSON.stringify(attestationResponse, null, 2);
+
+        // Since there's no backend, we'll just display the attestation response
+        // In a real application, you would send this to your server for verification and storage
+
+      } catch (error) {
+        console.error(error);
+        output.textContent += `\n\nError: ${error.message}`;
+      }
+    }
+
+    // Attach event listener to the button
+    document.getElementById('create-passkey').addEventListener('click', createPasskey);
+  </script>
+</body>
+</html>
+

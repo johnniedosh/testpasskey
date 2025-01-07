@@ -42,11 +42,175 @@
       return btoa(binary);
     }
 
+    // Helper function to convert ArrayBuffer to Hex
+    function arrayBufferToHex(buffer) {
+      const bytes = new Uint8Array(buffer);
+      return Array.from(bytes).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
     // Helper function to convert string to ArrayBuffer
     function stringToArrayBuffer(str) {
       const encoder = new TextEncoder();
       return encoder.encode(str);
     }
 
-    // Helper function to extract the public key from attestationObject
-    async function e
+    // Mock getRegistrationOptions function with ED25519
+    function getRegistrationOptions() {
+      const options = {
+        challenge: window.crypto.getRandomValues(new Uint8Array(32)),
+        timeout: 60000,
+        rp: {
+          name: "Example Corp",
+          id: window.location.hostname
+        },
+        user: {
+          id: window.crypto.getRandomValues(new Uint8Array(16)), // Unique user ID
+          name: "user@example.com",
+          displayName: "Example User"
+        },
+        pubKeyCredParams: [
+          {
+            type: "public-key",
+            alg: -8 // EdDSA (ED25519) algorithm
+          }
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "preferred"
+        },
+        attestation: "direct",
+      };
+
+      return options;
+    }
+
+    // Store the created credential for later use
+    let storedCredential = null;
+
+    // Function to parse the public key from the attestation object
+    async function extractPublicKey(attestationObject) {
+      const decodedAttestation = new Uint8Array(attestationObject);
+      const cbor = await import('https://cdn.jsdelivr.net/npm/cbor-x@1.0.1/dist/index.min.js');
+      const attestationData = cbor.decode(decodedAttestation);
+
+      const authData = attestationData.authData;
+      const publicKeyOffset = 37 + authData[36]; // Assume no extensions for simplicity
+      const publicKeyBytes = authData.slice(publicKeyOffset);
+
+      return arrayBufferToHex(publicKeyBytes.buffer);
+    }
+
+    // Function to create the passkey
+    async function createPasskey() {
+      const output = document.getElementById('output');
+      output.textContent = 'Generating registration options...';
+
+      try {
+        const options = getRegistrationOptions();
+
+        const publicKey = {
+          challenge: options.challenge,
+          timeout: options.timeout,
+          rp: options.rp,
+          user: {
+            id: options.user.id,
+            name: options.user.name,
+            displayName: options.user.displayName
+          },
+          pubKeyCredParams: options.pubKeyCredParams,
+          authenticatorSelection: options.authenticatorSelection,
+          attestation: options.attestation
+        };
+
+        output.textContent += '\n\nCreating credentials...';
+
+        const credential = await navigator.credentials.create({
+          publicKey: publicKey
+        });
+
+        output.textContent += '\nCredential created successfully!';
+
+        storedCredential = credential;
+
+        const attestationResponse = {
+          id: credential.id,
+          rawId: arrayBufferToBase64(credential.rawId),
+          type: credential.type,
+          response: {
+            attestationObject: arrayBufferToBase64(credential.response.attestationObject),
+            clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON)
+          }
+        };
+
+        output.textContent += '\n\nAttestation Response:';
+        output.textContent += '\n' + JSON.stringify(attestationResponse, null, 2);
+
+        const publicKeyHex = await extractPublicKey(credential.response.attestationObject);
+        output.textContent += '\n\nPublic Key (Hex): ' + publicKeyHex;
+
+      } catch (error) {
+        console.error(error);
+        output.textContent += `\n\nError: ${error.message}`;
+      }
+    }
+
+    // Function to sign a "foobar" message
+    async function signMessage() {
+      const output = document.getElementById('output');
+
+      if (!storedCredential) {
+        output.textContent += '\n\nPlease register a passkey first.';
+        return;
+      }
+
+      output.textContent += '\n\nSigning message "foobar"...';
+
+      try {
+        const message = "foobar";
+        const messageBuffer = stringToArrayBuffer(message);
+
+        const challenge = window.crypto.subtle.digest("SHA-256", messageBuffer);
+        const hashedChallenge = new Uint8Array(await challenge);
+
+        const publicKeyRequest = {
+          challenge: hashedChallenge,
+          timeout: 60000,
+          allowCredentials: [{
+            id: storedCredential.rawId,
+            type: "public-key",
+            transports: ["internal"]
+          }],
+          userVerification: "preferred"
+        };
+
+        const assertion = await navigator.credentials.get({
+          publicKey: publicKeyRequest
+        });
+
+        const assertionResponse = {
+          id: assertion.id,
+          rawId: arrayBufferToBase64(assertion.rawId),
+          type: assertion.type,
+          response: {
+            authenticatorData: arrayBufferToBase64(assertion.response.authenticatorData),
+            clientDataJSON: arrayBufferToBase64(assertion.response.clientDataJSON),
+            signature: arrayBufferToBase64(assertion.response.signature),
+            userHandle: assertion.response.userHandle ? arrayBufferToBase64(assertion.response.userHandle) : null
+          }
+        };
+
+        output.textContent += '\n\nSigned Message (Assertion Response):';
+        output.textContent += '\n' + JSON.stringify(assertionResponse, null, 2);
+        output.textContent += `\n\nOriginal Message: "${message}"`;
+
+      } catch (error) {
+        console.error(error);
+        output.textContent += `\n\nError: ${error.message}`;
+      }
+    }
+
+    document.getElementById('create-passkey').addEventListener('click', createPasskey);
+    document.getElementById('sign-message').addEventListener('click', signMessage);
+  </script>
+</body>
+</html>

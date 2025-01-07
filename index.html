@@ -42,12 +42,6 @@
       return btoa(binary);
     }
 
-    // Helper function to convert ArrayBuffer to Hex
-    function arrayBufferToHex(buffer) {
-      const bytes = new Uint8Array(buffer);
-      return Array.from(bytes).map(byte => byte.toString(16).padStart(2, '0')).join('');
-    }
-
     // Helper function to convert string to ArrayBuffer
     function stringToArrayBuffer(str) {
       const encoder = new TextEncoder();
@@ -56,6 +50,7 @@
 
     // Mock getRegistrationOptions function with ED25519
     function getRegistrationOptions() {
+      // In a real scenario, these options are fetched from the server
       const options = {
         challenge: window.crypto.getRandomValues(new Uint8Array(32)),
         timeout: 60000,
@@ -75,10 +70,11 @@
           }
         ],
         authenticatorSelection: {
-          authenticatorAttachment: "platform",
+          authenticatorAttachment: "platform", // Use platform authenticators (e.g., Touch ID, Windows Hello)
           userVerification: "preferred"
         },
         attestation: "direct",
+        // Optionally, you can add excludeCredentials to prevent duplicate registrations
       };
 
       return options;
@@ -86,19 +82,6 @@
 
     // Store the created credential for later use
     let storedCredential = null;
-
-    // Function to parse the public key from the attestation object
-    async function extractPublicKey(attestationObject) {
-      const decodedAttestation = new Uint8Array(attestationObject);
-      const cbor = await import('https://cdn.jsdelivr.net/npm/cbor-x@1.0.1/dist/index.min.js');
-      const attestationData = cbor.decode(decodedAttestation);
-
-      const authData = attestationData.authData;
-      const publicKeyOffset = 37 + authData[36]; // Assume no extensions for simplicity
-      const publicKeyBytes = authData.slice(publicKeyOffset);
-
-      return arrayBufferToHex(publicKeyBytes.buffer);
-    }
 
     // Function to create the passkey
     async function createPasskey() {
@@ -108,6 +91,7 @@
       try {
         const options = getRegistrationOptions();
 
+        // Convert necessary fields from base64 to ArrayBuffer
         const publicKey = {
           challenge: options.challenge,
           timeout: options.timeout,
@@ -124,14 +108,17 @@
 
         output.textContent += '\n\nCreating credentials...';
 
+        // Create the credential
         const credential = await navigator.credentials.create({
           publicKey: publicKey
         });
 
         output.textContent += '\nCredential created successfully!';
 
+        // Store the credential for signing
         storedCredential = credential;
 
+        // Prepare the attestation response
         const attestationResponse = {
           id: credential.id,
           rawId: arrayBufferToBase64(credential.rawId),
@@ -145,8 +132,8 @@
         output.textContent += '\n\nAttestation Response:';
         output.textContent += '\n' + JSON.stringify(attestationResponse, null, 2);
 
-        const publicKeyHex = await extractPublicKey(credential.response.attestationObject);
-        output.textContent += '\n\nPublic Key (Hex): ' + publicKeyHex;
+        // Since there's no backend, we'll just display the attestation response
+        // In a real application, you would send this to your server for verification and storage
 
       } catch (error) {
         console.error(error);
@@ -166,9 +153,11 @@
       output.textContent += '\n\nSigning message "foobar"...';
 
       try {
+        // Convert "foobar" to ArrayBuffer
         const message = "foobar";
         const messageBuffer = stringToArrayBuffer(message);
 
+        // Create a challenge from the message
         const challenge = window.crypto.subtle.digest("SHA-256", messageBuffer);
         const hashedChallenge = new Uint8Array(await challenge);
 
@@ -178,15 +167,17 @@
           allowCredentials: [{
             id: storedCredential.rawId,
             type: "public-key",
-            transports: ["internal"]
+            transports: ["internal"] // Adjust transports as needed
           }],
           userVerification: "preferred"
         };
 
+        // Get the assertion (signature)
         const assertion = await navigator.credentials.get({
           publicKey: publicKeyRequest
         });
 
+        // Prepare the assertion response
         const assertionResponse = {
           id: assertion.id,
           rawId: arrayBufferToBase64(assertion.rawId),
@@ -201,6 +192,8 @@
 
         output.textContent += '\n\nSigned Message (Assertion Response):';
         output.textContent += '\n' + JSON.stringify(assertionResponse, null, 2);
+
+        // Optionally, display the original message
         output.textContent += `\n\nOriginal Message: "${message}"`;
 
       } catch (error) {
@@ -209,6 +202,7 @@
       }
     }
 
+    // Attach event listeners to the buttons
     document.getElementById('create-passkey').addEventListener('click', createPasskey);
     document.getElementById('sign-message').addEventListener('click', signMessage);
   </script>

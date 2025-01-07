@@ -112,6 +112,8 @@
         const credential = await navigator.credentials.create({
           publicKey: publicKey
         });
+        console.log('cred\n\n');
+        console.log(credential);
 
         output.textContent += '\nCredential created successfully!';
 
